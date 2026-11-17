@@ -1,0 +1,52 @@
+{
+    "created":  "2026-11-17",
+    "sourceCommit":  "c44d73605985dff7b9c8fadc929a06efa3c6c068",
+    "description":  "Local design references and complete tracked Git history; excludes user databases and ignored files.",
+    "files":  [
+                  {
+                      "path":  "design/legacy-main.css",
+                      "bytes":  30931,
+                      "sha256":  "bf3853136498640378880d31e95056f61b75f63163ab3134cc5db41c5d47152d"
+                  },
+                  {
+                      "path":  "design/mint-cover.png",
+                      "bytes":  467350,
+                      "sha256":  "70c9634904508eabe60f238e567fbd7bb24cb58ce8570eaf2ee47f56c144ce82"
+                  },
+                  {
+                      "path":  "design/mint-preview-2.png",
+                      "bytes":  128688,
+                      "sha256":  "6cfa2bb3fa59268015b28a38cdbb804b646bb01e25f59ddb530ec788fc91155b"
+                  },
+                  {
+                      "path":  "legacy-history.bundle",
+                      "bytes":  3818670,
+                      "sha256":  "5a9dcd9bdbf8620fbd136f5f92d616e4a6b30043bc79e4cb44d29f1e242579f5"
+                  },
+                  {
+                      "path":  "screenshots/catalog-1280.png",
+                      "bytes":  257131,
+                      "sha256":  "a63edfb7a660016b86931ae290fea866aefd8f05eb6578300615a82befbaec40"
+                  },
+                  {
+                      "path":  "screenshots/catalog-150-percent.png",
+                      "bytes":  175556,
+                      "sha256":  "8f13cc0f47af66772832ac68da9fa58efd87c319ef0c2bf68629936e39aeb205"
+                  },
+                  {
+                      "path":  "screenshots/dashboard-1280.png",
+                      "bytes":  219918,
+                      "sha256":  "5c5b3915a64c5b4d96d0ae7869de6e1f3479417477efc3ec59ad3b19a3d8248a"
+                  },
+                  {
+                      "path":  "screenshots/stack-1280.png",
+                      "bytes":  270355,
+                      "sha256":  "68b32ad366df890f065f5bcd4b89da31f1f23c474c65acaab784ed0c9b0ea89e"
+                  },
+                  {
+                      "path":  "screenshots/workflow-1280.png",
+                      "bytes":  227553,
+                      "sha256":  "3c4582c792853b8885893ca65a8609baa9f721da286cf0eac090c577a4c6e2b5"
+                  }
+              ]
+}
