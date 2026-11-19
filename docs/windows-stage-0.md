@@ -12,6 +12,8 @@ npm run tauri -- build --bundles nsis -- --locked
 
 ## Проверки
 
+Windows CI использует образ `windows-2022`. На `windows-2025` два прогона остановились до подключения к WebView2. Похожий сбой WebView2 на Windows Server 2025 описан командой runner-images. [Отчёт runner-images](https://github.com/actions/runner-images/issues/14738).
+
 - Frontend — `npm run typecheck`, `npm run lint`, `npm test`, `npm run coverage`, `npm run build`. Покрытие этапа 0 относится к обработчику ошибок IPC. Сценарий интерфейса проверяет desktop smoke.
 - Rust — `cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`, `cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings`, `cargo test --manifest-path src-tauri/Cargo.toml --locked`. Для покрытия в CI используется cargo-llvm-cov 0.9.1 с `llvm-tools-preview`. Версия 0.9.1 учитывает расположение тестовых файлов в Cargo 1.100 на Windows. Сводка отражает LLVM regions, строки и функции. IPC через WebView2 выполняется отдельно. [Примечания к выпуску cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov/releases/tag/v0.9.1).
 - Контракты — `npm run contracts:generate` экспортирует TypeScript из DTO Rust через ts-rs. `npm run contracts:check` и CI сверяют результат с отслеживаемым файлом.
