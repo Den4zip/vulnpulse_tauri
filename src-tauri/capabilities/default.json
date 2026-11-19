@@ -1,1 +1,8 @@
-{ "$schema": "../gen/schemas/desktop-schema.json", "identifier": "main", "description": "Минимальные разрешения основного окна", "windows": ["main"], "permissions": [] }
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Чтение демонстрационного каталога из основного окна",
+  "local": true,
+  "windows": ["main"],
+  "permissions": ["allow-list-demo-catalog"]
+}

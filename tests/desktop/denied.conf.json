@@ -1,0 +1,13 @@
+{
+  "app": {
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "other-window",
+          "windows": ["other-window"],
+          "permissions": ["allow-list-demo-catalog"]
+        }
+      ]
+    }
+  }
+}

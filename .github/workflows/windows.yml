@@ -1,0 +1,73 @@
+name: Windows checks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Prepare toolchain and dependencies
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          rustup show active-toolchain
+          rustup component add llvm-tools-preview
+          cargo install cargo-llvm-cov --version 0.9.1 --locked
+          cargo fetch --locked --manifest-path src-tauri/Cargo.toml
+          npm ci
+      - name: Frontend and documentation checks
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run coverage
+          npm run docs:check
+      - name: Rust and contract checks
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+          cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path src-tauri/Cargo.toml --locked
+          npm run contracts:generate
+          git diff --exit-code -- src/generated
+          cargo llvm-cov --manifest-path src-tauri/Cargo.toml --locked --lib
+      - name: Build Windows installer
+        run: npm run tauri -- build --bundles nsis -- --locked
+      - name: Install release
+        run: |
+          $installer = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer not found' }
+          $installDir = Join-Path $env:RUNNER_TEMP 'vulnpulse-installed'
+          $setup = Start-Process -FilePath $installer.FullName -ArgumentList ('/S /NS /D=' + $installDir) -WindowStyle Hidden -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "NSIS finished with code $($setup.ExitCode)" }
+          $application = Join-Path $installDir 'vulnpulse.exe'
+          if (-not (Test-Path -LiteralPath $application -PathType Leaf)) { throw 'Installed VulnPulse executable not found' }
+          "VULNPULSE_INSTALLED_EXE=$application" >> $env:GITHUB_ENV
+      - name: Prepare Edge WebDriver
+        run: ./tests/desktop/setup-driver.ps1
+      - name: Smoke-test installed release
+        run: npm run desktop:smoke -- $env:VULNPULSE_INSTALLED_EXE allowed
+      - name: Verify that IPC rejects a window without permission
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run tauri -- build --debug --no-bundle --config (Resolve-Path tests/desktop/denied.conf.json).Path -- --locked
+          npm run desktop:smoke -- src-tauri/target/debug/vulnpulse.exe denied
+      - uses: actions/upload-artifact@v6
+        with:
+          name: vulnpulse-windows-x64
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
