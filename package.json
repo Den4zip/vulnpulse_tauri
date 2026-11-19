@@ -3,13 +3,34 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24 <25" },
+  "engines": {
+    "node": "24.21.0"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "tauri": "tauri"
+    "lint": "oxlint src tests scripts",
+    "test": "node --test tests/frontend/*.test.mjs",
+    "coverage": "node --experimental-test-coverage --test tests/frontend/*.test.mjs",
+    "contracts:generate": "cargo test --manifest-path src-tauri/Cargo.toml --locked --lib contracts::tests::generate_typescript_contracts -- --ignored --exact",
+    "contracts:check": "cargo test --manifest-path src-tauri/Cargo.toml --locked --lib contracts::tests::typescript_contracts_are_current -- --exact",
+    "docs:check": "node scripts/check-docs.mjs",
+    "tauri": "tauri",
+    "desktop:smoke": "node tests/desktop/smoke.mjs"
   },
-  "dependencies": { "@tauri-apps/api": "^2.0.0", "react": "^19.0.0", "react-dom": "^19.0.0" },
-  "devDependencies": { "@tauri-apps/cli": "^2.0.0", "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0", "@vitejs/plugin-react": "^4.0.0", "typescript": "~5.8.3", "vite": "^6.0.0" }
+  "dependencies": {
+    "@tauri-apps/api": "2.12.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "4.7.0",
+    "oxlint": "1.94.0",
+    "typescript": "5.8.3",
+    "vite": "6.4.6"
+  }
 }

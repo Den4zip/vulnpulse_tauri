@@ -3,7 +3,36 @@
   "productName": "VulnPulse",
   "version": "0.1.0",
   "identifier": "ru.vulnpulse.desktop",
-  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
-  "app": { "windows": [{ "label": "main", "title": "VulnPulse", "width": 1280, "height": 800, "minWidth": 800, "minHeight": 600 }], "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'" } },
-  "bundle": { "active": false }
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "VulnPulse",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "capabilities": ["main"],
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'",
+      "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:1420 ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "webviewInstallMode": { "type": "offlineInstaller" }
+    }
+  }
 }

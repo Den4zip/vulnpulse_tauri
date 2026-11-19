@@ -8,7 +8,15 @@ name = "vulnpulse_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10.9"
+tauri = { version = "2.12.7", features = [] }
+tokio = { version = "1", features = ["sync"] }
+
+[dev-dependencies]
+tempfile = "3"
+ts-rs = { version = "10.1.0", features = ["no-serde-warnings"] }
