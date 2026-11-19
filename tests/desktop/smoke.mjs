@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const [applicationArg, mode = 'allowed'] = process.argv.slice(2);
@@ -24,8 +24,8 @@ async function freeLoopbackPort() {
   return port;
 }
 
-async function eventually(assertion) {
-  const deadline = Date.now() + 20_000;
+async function eventually(assertion, timeout = 20_000) {
+  const deadline = Date.now() + timeout;
   for (;;) {
     try {
       return await assertion();
@@ -36,48 +36,83 @@ async function eventually(assertion) {
   }
 }
 
-const port = await freeLoopbackPort();
-const profile = await mkdtemp(join(tmpdir(), 'vulnpulse-webview-'));
-const driverEnv = { ...process.env, WEBVIEW2_USER_DATA_FOLDER: profile };
-const pathKey = Object.keys(driverEnv).find((key) => key.toLowerCase() === 'path') ?? 'Path';
-const systemRoot = process.env.SystemRoot;
-assert.ok(systemRoot, 'Windows SystemRoot must be set');
-driverEnv[pathKey] = [join(systemRoot, 'System32'), systemRoot].join(delimiter);
-const driver = spawn(driverPath, [`--port=${port}`], {
-  env: driverEnv,
-  stdio: ['ignore', 'inherit', 'inherit'],
-  windowsHide: true,
-});
-const stopped = new Promise((done) => {
-  driver.once('error', done);
-  driver.once('exit', (code) => done(new Error(`Edge WebDriver exited with code ${code}`)));
-});
-
-async function command(method, path, body) {
-  const response = await fetch(`http://127.0.0.1:${port}${path}`, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+function startProcess(name, executable, args, env) {
+  const child = spawn(executable, args, {
+    cwd: dirname(executable),
+    env,
+    stdio: ['ignore', 'inherit', 'inherit'],
+    windowsHide: true,
   });
-  const { value } = await response.json();
-  if (!response.ok) throw new Error(`WebDriver ${method} ${path}: ${value?.message}`);
-  return value;
+  const stopped = new Promise((done) => {
+    child.once('error', done);
+    child.once('exit', (code, signal) => done(new Error(`${name} exited (${code ?? signal})`)));
+  });
+  return { child, stopped };
 }
 
+const systemRoot = process.env.SystemRoot;
+assert.ok(systemRoot, 'Windows SystemRoot must be set');
+const systemEnv = { ...process.env };
+const pathKey = Object.keys(systemEnv).find((key) => key.toLowerCase() === 'path') ?? 'Path';
+systemEnv[pathKey] = [join(systemRoot, 'System32'), systemRoot].join(delimiter);
+
+const port = await freeLoopbackPort();
+const profile = await mkdtemp(join(tmpdir(), 'vulnpulse-webview-'));
+const driver = startProcess('Edge WebDriver', driverPath, [`--port=${port}`], systemEnv);
+
+async function command(method, path, body, timeout = 30_000) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeout),
+    });
+    const { value } = await response.json();
+    if (!response.ok) throw new Error(value?.message ?? response.statusText);
+    return value;
+  } catch (error) {
+    throw new Error(`Edge WebDriver ${method} ${path}: ${error.message}`, { cause: error });
+  }
+}
+
+let app;
 let session;
 try {
   await Promise.race([
-    eventually(async () => assert.equal((await command('GET', '/status')).ready, true)),
-    stopped.then((error) => { throw error; }),
+    eventually(async () => assert.equal((await command('GET', '/status', undefined, 2_000)).ready, true)),
+    driver.stopped.then((error) => { throw error; }),
   ]);
+
+  const debugPort = await freeLoopbackPort();
+  const debugAddress = `127.0.0.1:${debugPort}`;
+  app = startProcess('VulnPulse', application, [], {
+    ...systemEnv,
+    WEBVIEW2_USER_DATA_FOLDER: profile,
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${debugPort} --remote-debugging-address=127.0.0.1`,
+  });
+  const runtime = await Promise.race([
+    eventually(async () => {
+      const response = await fetch(`http://${debugAddress}/json/version`, {
+        signal: AbortSignal.timeout(2_000),
+      });
+      const version = await response.json();
+      assert.ok(version.Browser && version.webSocketDebuggerUrl, 'WebView2 debugger is not ready');
+      return version.Browser;
+    }, 45_000).catch((error) => {
+      throw new Error(`WebView2 at ${debugAddress} did not start: ${error.message}`, { cause: error });
+    }),
+    app.stopped.then((error) => { throw error; }),
+  ]);
+  console.log(`VulnPulse started with ${runtime}; attaching Edge WebDriver`);
+
   const { sessionId } = await command('POST', '/session', {
     capabilities: { alwaysMatch: {
       browserName: 'webview2',
       'ms:edgeChromium': true,
-      'ms:edgeOptions': { binary: application },
+      'ms:edgeOptions': { debuggerAddress: debugAddress },
     } },
-  });
+  }, 60_000);
   session = `/session/${sessionId}`;
   const execute = (script) => command('POST', `${session}/execute/sync`, { script, args: [] });
   const ipc = (limit) => command('POST', `${session}/execute/async`, {
@@ -129,8 +164,9 @@ try {
   try {
     if (session) await command('DELETE', session);
   } finally {
-    driver.kill();
-    await stopped;
+    driver.child.kill();
+    app?.child.kill();
+    await Promise.all([driver.stopped, app?.stopped]);
     assert.ok(profile.startsWith(join(resolve(tmpdir()), 'vulnpulse-webview-')));
     await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
