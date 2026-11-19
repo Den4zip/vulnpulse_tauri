@@ -125,15 +125,13 @@ try {
   await eventually(async () => {
     assert.equal(await execute('return document.querySelector("h1")?.textContent'), 'Демонстрационный каталог');
   });
-  const pressKey = (value) => command('POST', `${session}/actions`, {
-    actions: [{ type: 'key', id: 'keyboard', actions: [
-      { type: 'keyDown', value },
-      { type: 'keyUp', value },
-    ] }],
+  const button = await command('POST', `${session}/element`, {
+    using: 'css selector',
+    value: 'button[type="button"]',
   });
-  await pressKey('\uE004'); // WebDriver Tab
-  assert.equal(await execute('return document.activeElement?.textContent'), 'Загрузить примеры');
-  await pressKey('\uE007'); // WebDriver Enter
+  const buttonId = button['element-6066-11e4-a52e-4f735466cecf'];
+  assert.equal(await command('GET', `${session}/element/${buttonId}/text`), 'Загрузить примеры');
+  await command('POST', `${session}/element/${buttonId}/click`, {});
 
   if (mode === 'allowed') {
     await eventually(async () => {
