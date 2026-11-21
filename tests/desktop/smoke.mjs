@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
@@ -115,41 +115,180 @@ try {
   }, 60_000);
   session = `/session/${sessionId}`;
   const execute = (script) => command('POST', `${session}/execute/sync`, { script, args: [] });
-  const ipc = (limit) => command('POST', `${session}/execute/async`, {
-    script: `const [limit, done] = arguments;
-      window.__TAURI_INTERNALS__.invoke('list_demo_catalog', { request: { limit } })
+  const cdp = (cmd, params = {}) => command('POST', `${session}/ms/cdp/execute`, { cmd, params });
+  const ipc = (name, request) => command('POST', `${session}/execute/async`, {
+    script: `const [name, request, done] = arguments;
+      window.__TAURI_INTERNALS__.invoke(name, { request })
         .then((value) => done({ value }), (error) => done({ error }));`,
-    args: [limit],
+    args: [name, request],
   });
+  async function element(selector) {
+    const result = await command('POST', `${session}/element`, { using: 'css selector', value: selector });
+    return `${session}/element/${result['element-6066-11e4-a52e-4f735466cecf']}`;
+  }
+  // The runner can attach with the host window in the background. Activate UI
+  // controls in the WebView and emulate focus for keyboard input.
+  await cdp('Emulation.setFocusEmulationEnabled', { enabled: true });
+  async function click(selector) {
+    assert.equal(await execute(`const control = document.querySelector(${JSON.stringify(selector)});
+      if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return false;
+      control.scrollIntoView({ block: 'nearest' });
+      control.focus();
+      control.click();
+      return true;`), true, selector);
+  }
+  async function keys(selector, value) {
+    await execute(`document.querySelector(${JSON.stringify(selector)})?.focus();`);
+    return command('POST', `${await element(selector)}/value`, { text: value });
+  }
+  const textOf = (selector) => execute(`return document.querySelector(${JSON.stringify(selector)})?.textContent ?? ""`);
+  const entryIds = () => execute('return [...document.querySelectorAll("tbody .entry-link")].map(({ textContent }) => textContent.trim())');
+  const search = 'input[type=search]';
+  const reset = '.filter-row button';
+  const query = { search: '', severity: null, source: null, kev: null, sortBy: 'updated', direction: 'desc', page: 1, pageSize: 10 };
+  const heading = 'h1';
+  const detail = 'dialog[open]';
 
-  await eventually(async () => {
-    assert.equal(await execute('return document.querySelector("h1")?.textContent'), 'Демонстрационный каталог');
-  });
-  const button = await command('POST', `${session}/element`, {
-    using: 'css selector',
-    value: 'button[type="button"]',
-  });
-  const buttonId = button['element-6066-11e4-a52e-4f735466cecf'];
-  assert.equal(await command('GET', `${session}/element/${buttonId}/text`), 'Загрузить примеры');
-  await command('POST', `${session}/element/${buttonId}/click`, {});
+  await eventually(async () => assert.equal(await textOf(heading), 'Начало работы'));
+  await click('.welcome-panel button');
+  await eventually(async () => assert.equal(await textOf(heading), 'Каталог уязвимостей'));
 
   if (mode === 'allowed') {
     await eventually(async () => {
-      assert.deepEqual(
-        await execute('return [...document.querySelectorAll("li strong")].map(({ textContent }) => textContent)'),
-        ['DEMO-001', 'DEMO-002'],
-      );
+      assert.equal((await entryIds()).length, 10);
+      assert.equal((await entryIds())[0], 'DEMO-003');
+      assert.equal(await textOf('.summary-value'), '24');
     });
-    assert.deepEqual(await ipc(0), { error: { code: 'invalid_request' } });
-    const { value } = await ipc(1);
+    assert.deepEqual(await ipc('list_demo_catalog', { limit: 0 }), { error: { code: 'invalid_request' } });
+    const { value } = await ipc('list_demo_catalog', { limit: 1 });
     assert.deepEqual(value.entries.map(({ id }) => id), ['DEMO-001']);
+
+    for (const patch of [{ pageSize: 0 }, { page: 0 }, { search: 'щ'.repeat(121) }]) {
+      assert.deepEqual(await ipc('query_catalog', { ...query, ...patch }), { error: { code: 'invalid_request' } });
+    }
+    assert.deepEqual(await ipc('get_catalog_detail', { id: 'DEMO-999' }), { error: { code: 'not_found' } });
+
+    await click('[aria-label="Следующая страница"]');
+    await eventually(async () => {
+      assert.equal(await textOf('.page-indicator'), '2 / 3');
+      assert.equal((await entryIds())[0], 'DEMO-013');
+    });
+    await click('th:first-child button');
+    await eventually(async () => {
+      assert.equal(await textOf('.page-indicator'), '1 / 3');
+      assert.equal((await entryIds())[0], 'DEMO-001');
+    });
+
+    await keys(search, 'ШЛЮЗ');
+    await eventually(async () => assert.deepEqual(await entryIds(), ['DEMO-003', 'DEMO-004']));
+    const first = 'button[aria-label="Открыть DEMO-003"]';
+    await keys(first, '\uE007');
+    await eventually(async () => {
+      assert.match(await textOf(`${detail} h2`), /Шлюз централизованного доступа/);
+      assert.match(await textOf(`${detail} .source-list`), /CISA KEV/);
+      assert.match(await textOf(`${detail} .source-list`), /DEMO-OSV-003/);
+      assert.match(await textOf(`${detail} .source-list`), /DEMO-NVD-003.*CVSS 9,8/);
+    });
+    await keys(`${detail} .dialog-close`, '\uE00C');
+    await eventually(async () => {
+      assert.equal(await execute('return Boolean(document.querySelector("dialog[open]"))'), false);
+      assert.equal(await execute('return document.activeElement?.getAttribute("aria-label")'), 'Открыть DEMO-003');
+      assert.equal(await execute('return document.querySelector("input[type=search]").value'), 'ШЛЮЗ');
+    });
+    const findShortcut = { key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: 2 };
+    await cdp('Input.dispatchKeyEvent', { ...findShortcut, type: 'rawKeyDown' });
+    await cdp('Input.dispatchKeyEvent', { ...findShortcut, type: 'keyUp' });
+    await eventually(async () => {
+      assert.equal(await execute('return document.activeElement?.matches("input[type=search]")'), true);
+    });
+
+    await click('[aria-label="Начало работы"]');
+    await click('[aria-label="Каталог"]');
+    await eventually(async () => assert.deepEqual(await entryIds(), ['DEMO-003', 'DEMO-004']));
+    await keys(search, 'ZZ');
+    await eventually(async () => assert.equal(await textOf('.empty-state strong'), 'Ничего не найдено'));
+    await click('.empty-state button');
+    await eventually(async () => assert.equal((await entryIds()).length, 10));
+    await click('.summary-tile:nth-child(4)');
+    await eventually(async () => assert.deepEqual(await entryIds(), ['DEMO-003', 'DEMO-005', 'DEMO-017']));
+    await click(reset);
+    await eventually(async () => assert.equal((await entryIds()).length, 10));
+    await click('th:last-child button');
+    await eventually(async () => assert.equal((await entryIds())[0], 'DEMO-003'));
+    await click('.workspace-heading button');
+    await eventually(async () => assert.equal(await textOf('.toast'), 'Каталог перечитан из локальной базы.'));
+    await eventually(async () => assert.equal(await textOf('.toast'), ''));
+
+    await click('.about-button');
+    const closeAbout = `${detail} .dialog-close`;
+    const licenses = `${detail} summary`;
+    await keys(closeAbout, '\uE004');
+    await eventually(async () => assert.equal(await execute('return document.activeElement?.tagName'), 'SUMMARY'));
+    await keys(licenses, '\uE008\uE004\uE000');
+    await eventually(async () => assert.equal(await execute('return document.activeElement?.getAttribute("aria-label")'), 'Закрыть'));
+    await keys(closeAbout, '\uE00C');
+    await eventually(async () => assert.equal(await execute('return document.activeElement?.getAttribute("aria-label")'), 'О дизайне'));
+    await execute('document.querySelector("h1").focus(); window.scrollTo(0, 0);');
+
+    const output = process.env.VULNPULSE_SCREENSHOTS;
+    if (output) await mkdir(output, { recursive: true });
+    async function capture(name) {
+      if (!output) return;
+      const png = await command('GET', `${session}/screenshot`);
+      await writeFile(join(output, `${name}.png`), Buffer.from(png, 'base64'));
+    }
+    for (const [name, width, height, scale] of [
+      ['catalog-1280-100', 1280, 800, 1],
+      ['catalog-1280-125', 1280, 800, 1.25],
+      ['catalog-1280-150', 1280, 800, 1.5],
+      ['catalog-1024-100', 1024, 768, 1],
+    ]) {
+      const cssWidth = Math.floor(width / scale);
+      await cdp('Emulation.setDeviceMetricsOverride', {
+        width: cssWidth, height: Math.floor(height / scale), deviceScaleFactor: scale, mobile: false,
+      });
+      await eventually(async () => {
+        assert.equal(await execute('return window.innerWidth'), cssWidth);
+        assert.equal(await execute('return document.documentElement.scrollWidth <= window.innerWidth'), true);
+        assert.equal(await execute(`const button = document.querySelector('[aria-label="Следующая страница"]');
+          const rect = button.getBoundingClientRect();
+          return rect.right <= window.innerWidth && rect.bottom <= window.innerHeight;`), true);
+      });
+      await capture(name);
+      if (name === 'catalog-1280-150') {
+        const original = await textOf('.summary-value');
+        await execute('document.querySelector(".summary-value").textContent = "100\u00a0000";');
+        try {
+          assert.equal(await execute(`const number = document.querySelector(".summary-value");
+            const icon = document.querySelector(".summary-icon");
+            return number.getBoundingClientRect().right <= icon.getBoundingClientRect().left;`), true);
+          await capture('catalog-1280-150-large-count');
+        } finally {
+          await execute(`document.querySelector(".summary-value").textContent = ${JSON.stringify(original)};`);
+        }
+      }
+    }
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 600, height: 533, deviceScaleFactor: 1, mobile: false });
+    await click(first);
+    await eventually(async () => {
+      assert.match(await textOf(`${detail} h2`), /Шлюз централизованного доступа/);
+      assert.equal(await execute('return document.querySelector("dialog").offsetWidth'), 600);
+    });
+    await capture('catalog-drawer-600');
+    await cdp('Emulation.clearDeviceMetricsOverride');
   } else {
     await eventually(async () => {
       assert.match(await execute('return document.querySelector("[role=alert]")?.textContent ?? ""'), /Повторите попытку/);
     });
-    const { error } = await ipc(1);
-    assert.match(error, /not allowed|not permitted|denied/i);
-    assert.match(error, /list_demo_catalog/);
+    for (const [name, request] of [
+      ['list_demo_catalog', { limit: 1 }],
+      ['query_catalog', query],
+      ['get_catalog_detail', { id: 'DEMO-003' }],
+    ]) {
+      const { error } = await ipc(name, request);
+      assert.match(error, /not allowed|not permitted|denied/i);
+      assert.ok(error.includes(name));
+    }
   }
 
   const external = await execute(`

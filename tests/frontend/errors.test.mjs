@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { commandErrorMessage } from '../../src/lib/api/errors.ts';
 
-test('displays the three structured command errors', () => {
+test('displays the structured command errors', () => {
   assert.match(commandErrorMessage({ code: 'invalid_request' }), /Недопустимый запрос/);
   assert.match(commandErrorMessage({ code: 'busy' }), /Каталог занят/);
   assert.match(commandErrorMessage({ code: 'unavailable' }), /локальный каталог/);
+  assert.match(commandErrorMessage({ code: 'not_found' }), /Запись отсутствует/);
 });
 
 test('replaces unexpected IPC errors with a safe message', () => {
