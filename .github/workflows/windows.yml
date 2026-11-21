@@ -60,6 +60,8 @@ jobs:
       - name: Prepare Edge WebDriver
         run: ./tests/desktop/setup-driver.ps1
       - name: Smoke-test installed release
+        env:
+          VULNPULSE_SCREENSHOTS: ${{ runner.temp }}/vulnpulse-screenshots
         run: npm run desktop:smoke -- $env:VULNPULSE_INSTALLED_EXE allowed
       - name: Verify that IPC rejects a window without permission
         run: |
@@ -70,4 +72,9 @@ jobs:
         with:
           name: vulnpulse-windows-x64
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v6
+        with:
+          name: vulnpulse-catalog-webview
+          path: ${{ runner.temp }}/vulnpulse-screenshots/*.png
           if-no-files-found: error

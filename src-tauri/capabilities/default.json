@@ -4,5 +4,5 @@
   "description": "Чтение демонстрационного каталога из основного окна",
   "local": true,
   "windows": ["main"],
-  "permissions": ["allow-list-demo-catalog"]
+  "permissions": ["allow-list-demo-catalog", "allow-query-catalog", "allow-get-catalog-detail"]
 }

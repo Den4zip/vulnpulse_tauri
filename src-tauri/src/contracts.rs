@@ -1,3 +1,4 @@
+use crate::domain::{CatalogQuery, CatalogSort, Severity, SortDirection, SourceKind};
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
@@ -23,6 +24,104 @@ pub(crate) struct ListDemoCatalogResponse {
     pub entries: Vec<DemoEntryDto>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[cfg_attr(test, derive(TS))]
+pub(crate) struct CatalogQueryRequest {
+    pub search: String,
+    pub severity: Option<Severity>,
+    pub source: Option<SourceKind>,
+    pub kev: Option<bool>,
+    pub sort_by: CatalogSort,
+    pub direction: SortDirection,
+    pub page: u32,
+    pub page_size: u32,
+}
+
+impl TryFrom<CatalogQueryRequest> for CatalogQuery {
+    type Error = CommandErrorCode;
+
+    fn try_from(request: CatalogQueryRequest) -> Result<Self, Self::Error> {
+        if request.search.chars().count() > 120
+            || request.search.contains('\0')
+            || request.page == 0
+            || !(1..=100).contains(&request.page_size)
+        {
+            return Err(CommandErrorCode::InvalidRequest);
+        }
+        Ok(Self {
+            search: request.search.trim().to_lowercase(),
+            severity: request.severity,
+            source: request.source,
+            kev: request.kev,
+            sort_by: request.sort_by,
+            direction: request.direction,
+            page: request.page,
+            page_size: request.page_size,
+        })
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(TS))]
+pub(crate) struct CatalogEntryDto {
+    pub id: String,
+    pub title: String,
+    pub severity: Severity,
+    pub cvss: Option<f64>,
+    pub kev: bool,
+    pub updated_at: Option<String>,
+    pub sources: Vec<SourceKind>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(test, derive(TS))]
+pub(crate) struct CatalogSummaryDto {
+    pub total: u32,
+    pub critical: u32,
+    pub high: u32,
+    pub kev: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(TS))]
+pub(crate) struct CatalogPageDto {
+    pub entries: Vec<CatalogEntryDto>,
+    pub summary: CatalogSummaryDto,
+    pub filtered_total: u32,
+    pub page: u32,
+    pub page_size: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(TS))]
+pub(crate) struct CatalogDetailRequest {
+    pub id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(TS))]
+pub(crate) struct SourceRecordDto {
+    pub kind: SourceKind,
+    pub reference: String,
+    pub retrieved_at: String,
+    pub cvss: Option<f64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(TS))]
+pub(crate) struct CatalogDetailDto {
+    pub entry: CatalogEntryDto,
+    pub description: String,
+    pub published_at: Option<String>,
+    pub records: Vec<SourceRecordDto>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(TS))]
@@ -30,6 +129,7 @@ pub(crate) enum CommandErrorCode {
     InvalidRequest,
     Busy,
     Unavailable,
+    NotFound,
 }
 
 #[derive(Serialize)]
@@ -55,6 +155,17 @@ mod tests {
             ListDemoCatalogRequest::decl(),
             DemoEntryDto::decl(),
             ListDemoCatalogResponse::decl(),
+            Severity::decl(),
+            SourceKind::decl(),
+            CatalogSort::decl(),
+            SortDirection::decl(),
+            CatalogQueryRequest::decl(),
+            CatalogEntryDto::decl(),
+            CatalogSummaryDto::decl(),
+            CatalogPageDto::decl(),
+            CatalogDetailRequest::decl(),
+            SourceRecordDto::decl(),
+            CatalogDetailDto::decl(),
             CommandErrorCode::decl(),
             CommandError::decl(),
         ];

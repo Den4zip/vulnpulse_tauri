@@ -4,6 +4,7 @@ const messages: Record<CommandErrorCode, string> = {
   invalid_request: 'Недопустимый запрос к каталогу.',
   busy: 'Каталог занят. Попробуйте ещё раз.',
   unavailable: 'Не удалось открыть локальный каталог.',
+  not_found: 'Запись отсутствует в локальном каталоге.',
 };
 
 export function commandErrorMessage(error: unknown): string {

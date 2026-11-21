@@ -6,6 +6,28 @@ export type DemoEntryDto = { id: string, title: string, };
 
 export type ListDemoCatalogResponse = { entries: Array<DemoEntryDto>, };
 
-export type CommandErrorCode = "invalid_request" | "busy" | "unavailable";
+export type Severity = "unknown" | "none" | "low" | "medium" | "high" | "critical";
+
+export type SourceKind = "nvd" | "osv" | "cisa_kev" | "fstec";
+
+export type CatalogSort = "id" | "title" | "severity" | "updated";
+
+export type SortDirection = "asc" | "desc";
+
+export type CatalogQueryRequest = { search: string, severity: Severity | null, source: SourceKind | null, kev: boolean | null, sortBy: CatalogSort, direction: SortDirection, page: number, pageSize: number, };
+
+export type CatalogEntryDto = { id: string, title: string, severity: Severity, cvss: number | null, kev: boolean, updatedAt: string | null, sources: Array<SourceKind>, };
+
+export type CatalogSummaryDto = { total: number, critical: number, high: number, kev: number, };
+
+export type CatalogPageDto = { entries: Array<CatalogEntryDto>, summary: CatalogSummaryDto, filteredTotal: number, page: number, pageSize: number, };
+
+export type CatalogDetailRequest = { id: string, };
+
+export type SourceRecordDto = { kind: SourceKind, reference: string, retrievedAt: string, cvss: number | null, };
+
+export type CatalogDetailDto = { entry: CatalogEntryDto, description: string, publishedAt: string | null, records: Array<SourceRecordDto>, };
+
+export type CommandErrorCode = "invalid_request" | "busy" | "unavailable" | "not_found";
 
 export type CommandError = { code: CommandErrorCode, };

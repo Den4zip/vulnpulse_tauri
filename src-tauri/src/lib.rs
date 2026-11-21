@@ -18,7 +18,11 @@ fn is_app_url(url: &Url, dev_url: Option<&Url>) -> bool {
 pub fn run() {
     tauri::Builder::default()
         .manage(commands::DemoState::default())
-        .invoke_handler(tauri::generate_handler![commands::list_demo_catalog])
+        .invoke_handler(tauri::generate_handler![
+            commands::list_demo_catalog,
+            commands::query_catalog,
+            commands::get_catalog_detail,
+        ])
         .setup(|app| {
             let config = app
                 .config()
